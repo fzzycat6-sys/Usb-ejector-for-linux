@@ -1,0 +1,74 @@
+`mkdir -p ~/.local/share/applications && cat << 'EOF' > ~/.local/share/applications/eject-usb-menu.sh
+#!/bin/bash
+
+clear
+echo "================================="
+echo "      SAFE REMOVE USB MENU       "
+echo "================================="
+echo ""
+
+# Display usb devices connected 
+echo "Connected USB Devices:"
+lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS,TRAN | grep -E "NAME|usb" | grep -v "grep"
+echo ""
+
+# Ask the user to input the specific drive name they want to target
+read -p "Type the name of the USB you want to eject (e.g., sda): " usb_input
+
+# Trim any accidental path descriptors or whitespace
+drive_name=$(echo "$usb_input" | sed 's|^/dev/||' | tr -d '[:space:]')
+
+# Verify the entered device name exists as a valid block device
+if [ -z "$drive_name" ] || [ ! -b "/dev/$drive_name" ]; then
+    echo ""
+    echo "❌ Error: Device '/dev/$drive_name' does not exist or is not a valid drive."
+    echo "Please verify the spelling from the list above and try again."
+    echo ""
+    echo "Press any key to close..."
+    read -n 1 -s
+    exit 1
+fi
+
+drive="/dev/$drive_name"
+
+echo ""
+echo "⏳ Unmounting and powering off $drive_name..."
+
+# Unmount all active partitions attached to that drive layout
+for part in "${drive}"*; do
+    if [ -b "$part" ] && [ "$part" != "$drive" ]; then
+        udisksctl unmount -b "$part" 2>/dev/null || sudo umount "$part" 2>/dev/null
+    fi
+done
+
+# Execute hardware power down or eject sequence
+if udisksctl power-off -b "$drive" 2>/dev/null || sudo eject "$drive" 2>/dev/null; then
+    echo ""
+    echo "✅ USB successfully ejected! It is now safe to unplug."
+else
+    echo ""
+    echo "❌ Error: Could not safely eject $drive_name. The drive might be busy or in use."
+fi
+
+echo ""
+echo "Press any key to exit..."
+read -n 1 -s
+EOF
+
+chmod +x ~/.local/share/applications/eject-usb-menu.sh
+
+cat << EOF > ~/.local/share/applications/Eject-USB-Terminal.desktop
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Safe Remove USB (Terminal)
+Comment=Interactive terminal script to eject USB drives
+Exec=$HOME/.local/share/applications/eject-usb-menu.sh
+Icon=media-removable
+Terminal=true
+Categories=Utility;
+EOF
+
+chmod +x ~/.local/share/applications/Eject-USB-Terminal.desktop
+echo "Setup complete! Please relaunch the application now."
+`
